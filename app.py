@@ -31,9 +31,9 @@ def generate_unique_filename():
 def send_flag_notification(proctoring_id, flag_type, screenshot_url, pc_capture_url):
     """Send flag notification to the proctoring API"""
     url = f"{PROCTORING_API_BASE_URL}/assessments/proctoring-reports/{proctoring_id}/"
-    
+
     current_time = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    
+
     payload = {
         "flags": [
             {
@@ -44,7 +44,7 @@ def send_flag_notification(proctoring_id, flag_type, screenshot_url, pc_capture_
             }
         ]
     }
-    
+
     try:
         response = requests.patch(url, json=payload)
         response.raise_for_status()
@@ -62,11 +62,11 @@ def check_and_send_flags(analysis, proctoring_id, screenshot_url, pc_capture_url
         "looking_away": "looking_away",
         "suspicious_movements": "suspicious_movements"
     }
-    
+
     for analysis_key, flag_type in flag_mappings.items():
         if analysis.get(analysis_key) == True:
             send_flag_notification(proctoring_id, flag_type, screenshot_url, pc_capture_url)
-    
+
     prohibited_objects = analysis.get("prohibited_objects", {})
     if prohibited_objects.get("detected") == True:
         for item in prohibited_objects.get("items", []):
@@ -78,10 +78,10 @@ def process_images():
     data = request.json
     proctoring_id = data.get("proctoring_id")
     image_pairs = data.get("images")
-    
+
     if not proctoring_id:
         return jsonify({"error": "proctoring_id is required"}), 400
-    
+
     if not image_pairs or not isinstance(image_pairs, list):
         return jsonify({"error": "No images provided or invalid format"}), 400
 
@@ -89,56 +89,56 @@ def process_images():
         analysis_urls = []  # URLs for screenshots to be analyzed
         screenshot_urls = []  # Cloudinary URLs for screenshots
         pc_capture_urls = []  # Cloudinary URLs for PC captures
-        
+
         for index, image_pair in enumerate(image_pairs):
             screenshot = image_pair.get("screenshot")
             pc_capture = image_pair.get("pc_capture")
-            
+
             if not screenshot or not pc_capture:
                 return jsonify({"error": f"Missing screenshot or pc_capture for image pair {index + 1}"}), 400
-            
+
             try:
                 start_time = time.time()
-                
+
                 # Upload screenshot
                 screenshot_filename = f"{proctoring_id}_screen_{generate_unique_filename()}"
                 if isinstance(screenshot, str) and 'base64,' in screenshot:
                     screenshot_data = base64.b64decode(screenshot.split('base64,')[1])
                 else:
                     screenshot_data = base64.b64decode(screenshot)
-                
+
                 screenshot_result = cloudinary_upload(
                     screenshot_data,
                     folder="exam_proctoring",
                     public_id=screenshot_filename,
                     resource_type="image"
                 )
-                
+
                 # Upload PC capture
                 pc_capture_filename = f"{proctoring_id}_pc_{generate_unique_filename()}"
                 if isinstance(pc_capture, str) and 'base64,' in pc_capture:
                     pc_capture_data = base64.b64decode(pc_capture.split('base64,')[1])
                 else:
                     pc_capture_data = base64.b64decode(pc_capture)
-                
+
                 pc_capture_result = cloudinary_upload(
                     pc_capture_data,
                     folder="exam_proctoring",
                     public_id=pc_capture_filename,
                     resource_type="image"
                 )
-                
+
                 end_time = time.time()
                 print(f"Time taken to upload image pair {index + 1}: {end_time - start_time} seconds")
-                
+
                 # Store URLs
                 screenshot_url = screenshot_result.get("secure_url")
                 pc_capture_url = pc_capture_result.get("secure_url")
-                
+
                 analysis_urls.append(screenshot_url)  # Only screenshots are analyzed
                 screenshot_urls.append(screenshot_url)
                 pc_capture_urls.append(pc_capture_url)
-                
+
             except Exception as e:
                 return jsonify({"error": f"Failed to upload image pair {index + 1}: {str(e)}"}), 500
 
@@ -184,7 +184,7 @@ def process_images():
         ]
 
         start_time = time.time()
-        
+
         response_data = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -194,7 +194,7 @@ def process_images():
         print(f"Time taken for OpenAI API response: {time.time() - start_time} seconds")
 
         content = response_data.choices[0].message.content
-        
+
         try:
             parsed_content = json.loads(content)
         except json.JSONDecodeError as decode_error:
@@ -207,7 +207,7 @@ def process_images():
                 "analysis": parsed_content[i]["analysis"]
             }
             final_response.append(analysis_result)
-            
+
             # Send flags with Cloudinary URLs
             check_and_send_flags(
                 parsed_content[i]["analysis"],
@@ -221,6 +221,6 @@ def process_images():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    port = int(os.getenv("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+# if __name__ == '__main__':
+#     port = int(os.getenv("PORT", 5100))
+#     app.run(host='0.0.0.0', port=port, debug=True)
